@@ -13,19 +13,22 @@ import kernels as ker
 from fbm import FBM
 import time
 import matplotlib.pyplot as plt
-
+plt.style.use('seaborn')
 tf.reset_default_graph()
 
+
+
+version = 1
 kernel = ker.bm_kernel
-num_epochs = 12
+num_epochs = 30
 #series_length = 999
-n_samples = 1000
-batch_size = 10
+n_samples = 5000
+batch_size = 100
 H = 0.7
 train_sample_length = 100
 n = 2
-sample_length = 100
-state_size = 10
+sample_length = 200
+state_size = 100
 learning_rate = 0.02
 test_size = 100
 sigma = 0.1
@@ -96,21 +99,36 @@ def make_decoder(code, scope='decoder'):
                 outputs_GRU_de, states_GRU_de = tf.nn.dynamic_rnn(cell_GRU_de, code, dtype=tf.float32)
         loc = outputs_GRU_de[:,:,0]
         #print(loc.shape)
-        scale = 0.052*tf.ones_like(loc)
+        scale = 0.05*tf.ones_like(loc)
         #print(scale.shape)
         return tfd.MultivariateNormalDiag(loc, scale)
         
 data = generate_data(n_samples=n_samples, sample_length=sample_length, H=H)
 data = np.expand_dims(data, axis=2)
 
+@np.vectorize
+def f_1(x):
+    return 0.
+@np.vectorize
+def f_2(x):
+    return 10*x
 
-print('Version: 0.1')
+def f_3(x):
+    return np.sin(10*x)
+
+def f_4(x):
+    return (1/(x+0.01)) * np.sin(10*x)
+
+test_functions = [f_1, f_2, f_3, f_4]
+
+
+print('Version: ', version)
 print('Assembling the graph... ')
 X = tf.placeholder(tf.float32, [None, sample_length + 1, 1], name='data')
 #make_encoder = tf.make_template('encoder', make_encoder)
 #make_decoder = tf.make_template('decoder', make_decoder)
 
-prior = make_wn_prior(code_size=tf.shape(X)[1])
+prior = make_wn_prior(code_size=sample_length + 1)
 posterior = make_encoder(X)
 
 code = posterior.sample()
@@ -121,10 +139,29 @@ X_collapsed = tf.squeeze(X, axis=[2])
 decoded = make_decoder(code)
 likelihood = decoded.log_prob(X_collapsed)
 elbo = tf.reduce_mean(likelihood - divergence)
-optimize = tf.train.AdamOptimizer(0.01).minimize(-elbo)
+optimize = tf.train.AdamOptimizer(0.001).minimize(-elbo)
 init = tf.global_variables_initializer()
 reconstructed_version = decoded.mean()
+
+#reconstructed_version = decoded.sample()
 #print('rv shape', reconstructed_version)
+
+def sample_generator():
+    with tf.Session() as sess:
+        code_sample = sess.run(prior.sample())
+        saver.restore(sess, "./version_" + str(version))
+        
+        code_sample = np.expand_dims(code_sample, axis=0)
+        generated_sample = sess.run(reconstructed_version, 
+                                    feed_dict={code: code_sample})
+    return np.squeeze(generated_sample)
+
+def sample_plot():
+    x = np.linspace(0,1, sample_length + 1)
+    plt.plot(x, sample_generator())
+    plt.show()
+    
+    
 
 
 print('Training the network... ')
@@ -167,11 +204,11 @@ with tf.Session() as sess:
             print(80*'_')
             
 
-
+    saver.save(sess, "./version_" + str(version))
 
     print('Checking for sanity...')
-    x = np.linspace(0, 1, 101)
-    f_x =  x - x**2
+    x = np.linspace(0, 1, sample_length+1)
+    f_x =  x - x**2*np.sin(x)
     f_x = np.expand_dims(f_x, axis=0)
     f_x = np.expand_dims(f_x, axis=2)
     reconstruction_mean = sess.run(reconstructed_version, feed_dict={X: f_x})
@@ -179,13 +216,24 @@ with tf.Session() as sess:
     plt.plot(range(sample_length+1), reconstruction_mean[0], 'g', linewidth=1, label='Reconstructed path - means')
     plt.plot(range(sample_length+1), original_version[0], 'r', linewidth=1.4, label='Original path')
     plt.legend(bbox_to_anchor=(1.05, 1), loc=0, borderaxespad=0.)
-            
     plt.show()
     
 
 
 
 
+    for j in range(4):
+        values = test_functions[j](x)
+        values = np.expand_dims(values, axis=0)
+        values = np.expand_dims(values, axis=2)
+        reconstruction_mean = sess.run(reconstructed_version, 
+                                       feed_dict={X: values})
+        plt.plot(range(sample_length+1), reconstruction_mean[0], 'g', linewidth=1, label='Reconstructed path - means')
+        plt.plot(range(sample_length+1), values[0], 'r', linewidth=1.4, label='Original path')
+        plt.legend()
+        plt.show()
+    
+    
 
 
 
