@@ -105,7 +105,7 @@ def make_decoder(code, data_shape):
                                 activation=tf.nn.sigmoid, 
                                 name='scale',
                                 use_bias=False)
-        scale = tf.maximum(scale, 0.5)
+        scale = tf.maximum(scale, 2)
         #scale = tf.maximum(scale, 0.)
         return tfd.MultivariateNormalDiag(loc=loc,
                                           scale_diag=scale)
