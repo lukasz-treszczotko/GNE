@@ -20,17 +20,17 @@ tf.reset_default_graph()
 
 version = 1
 kernel = ker.bm_kernel
-num_epochs = 30
+num_epochs = 20
 #series_length = 999
 n_samples = 5000
 batch_size = 100
 H = 0.7
-train_sample_length = 100
+
 n = 2
 sample_length = 200
-state_size = 100
+state_size = 15
 learning_rate = 0.02
-test_size = 100
+
 sigma = 0.1
 n_batches = n_samples // batch_size
 code_size = sample_length
@@ -83,11 +83,13 @@ def make_encoder(data, scope='encoder'):
         loc = outputs_GRU_en[:,:,0]
         #print(loc.shape)
         scale =  outputs_GRU_en[:,:,1]
-        scale = tf.minimum(tf.zeros_like(loc), scale)
+        scale = tf.nn.softplus(scale)
+        z = tfd.MultivariateNormalDiag(loc, scale)
+        
         #scale = tf.nn.softplus(scale)
         #scale = tf.minimum(scale, tf.ones_like(scale))
         #print(scale.shape)
-        return tfd.MultivariateNormalDiag(loc, scale)
+        return z
 
 def make_decoder(code, scope='decoder'):
     code = tf.expand_dims(code, axis=[2])
@@ -139,7 +141,7 @@ X_collapsed = tf.squeeze(X, axis=[2])
 decoded = make_decoder(code)
 likelihood = decoded.log_prob(X_collapsed)
 elbo = tf.reduce_mean(likelihood - divergence)
-optimize = tf.train.AdamOptimizer(0.001).minimize(-elbo)
+optimize = tf.train.AdamOptimizer(0.01).minimize(-elbo)
 init = tf.global_variables_initializer()
 reconstructed_version = decoded.mean()
 
@@ -148,7 +150,7 @@ reconstructed_version = decoded.mean()
 
 def sample_generator():
     with tf.Session() as sess:
-        code_sample = sess.run(prior.sample())
+        code_sample = np.random.normal(size=sample_length+1)
         saver.restore(sess, "./version_" + str(version))
         
         code_sample = np.expand_dims(code_sample, axis=0)
